@@ -1,0 +1,151 @@
+#include "mbed.h"
+#include "stm32746g_discovery_lcd.h"
+#include <cstdint>
+#include <string>
+#include "stack"
+
+Thread auto1;
+Thread auto2;
+Thread auto3;
+Thread auto4;
+Thread auto5;
+Thread auto6;
+Thread auto7;
+Semaphore parking_Sem(4);
+Mutex parking_mutex;
+Mutex car_mutex;
+std::stack<int> parking;
+
+
+struct Car {
+    uint32_t timeInParking;
+    uint32_t timeOutsideParking;
+    uint32_t carColor;
+}car_1,car_2,car_3,car_4,car_5,car_6,car_7;
+
+
+
+
+void inicializace_display(){
+    BSP_LCD_Init();
+    BSP_LCD_LayerDefaultInit(LTDC_ACTIVE_LAYER, LCD_FB_START_ADDRESS);
+    BSP_LCD_SelectLayer(LTDC_ACTIVE_LAYER);
+    BSP_LCD_Clear(LCD_COLOR_BLACK);
+}
+
+
+
+
+void display_thread()
+{
+    while(true){
+        BSP_LCD_Clear(LCD_COLOR_BLACK);
+        BSP_LCD_SetBackColor(LCD_COLOR_BLACK);
+        BSP_LCD_SetTextColor(LCD_COLOR_GREEN);
+        BSP_LCD_DrawRect(10, 20, 50, 50);
+        HAL_Delay(1000);        
+    }
+}
+
+void draw(uint32_t color, int pos){
+    BSP_LCD_SetTextColor(color);
+    switch(pos){
+        case 1:
+            BSP_LCD_DrawRect(0, 0, 200, 100);
+            BSP_LCD_FillRect(0, 0, 200, 100);
+            break;
+        case 2:
+            BSP_LCD_DrawRect(0, 100, 200, 100);
+            BSP_LCD_FillRect(0, 100, 200, 100);
+            break;
+        case 3:
+            BSP_LCD_DrawRect(200, 0, 200, 100);
+            BSP_LCD_FillRect(200, 0, 200, 100);
+            break;
+        case 4:
+            BSP_LCD_DrawRect(200, 100, 200, 100);
+            BSP_LCD_FillRect(200, 100, 200, 100);
+            break;
+    }
+}
+
+void inPark(uint32_t color, uint32_t time, int pos){
+    parking_mutex.lock();
+    draw(color, pos);
+    parking_mutex.unlock();
+
+    ThisThread::sleep_for(time);
+}
+
+void outPark(uint32_t time, int pos){
+    parking_Sem.release();
+    draw(LCD_COLOR_BLACK, pos);
+    parking.push(pos);
+
+    ThisThread::sleep_for(time);
+}
+
+
+void car_func(Car *car){
+    int position;
+    while(true){
+        parking_Sem.acquire();
+        if (!parking.empty()){
+            car_mutex.lock();
+            position = parking.top();
+            parking.pop();
+            car_mutex.unlock();
+            inPark(car -> carColor, car -> timeInParking, position);
+            outPark(car -> timeOutsideParking, position);
+        }
+    }
+
+}
+
+
+int main()
+{
+    inicializace_display();
+    parking.push(1);
+    parking.push(2);
+    parking.push(3);
+    parking.push(4);
+
+    car_1.timeInParking = 5000;
+    car_1.timeOutsideParking = 10000;
+    car_1.carColor = LCD_COLOR_GREEN;
+
+    car_2.timeInParking = 10000;
+    car_2.timeOutsideParking = 15000;
+    car_2.carColor = LCD_COLOR_WHITE;
+
+    car_3.timeInParking = 12000;
+    car_3.timeOutsideParking = 17000;
+    car_3.carColor = LCD_COLOR_BLUE;
+
+    car_4.timeInParking = 15000;
+    car_4.timeOutsideParking = 10000;
+    car_4.carColor = LCD_COLOR_RED;
+
+    car_5.timeInParking = 10000;
+    car_5.timeOutsideParking = 20000;
+    car_5.carColor = LCD_COLOR_CYAN;
+
+    car_6.timeInParking = 13000;
+    car_6.timeOutsideParking = 17000;
+    car_6.carColor = LCD_COLOR_ORANGE;
+
+    car_7.timeInParking = 14000;
+    car_7.timeOutsideParking = 11000;
+    car_7.carColor = LCD_COLOR_YELLOW;
+
+    auto1.start(callback(car_func, &car_1));
+    auto2.start(callback(car_func, &car_2));
+    auto3.start(callback(car_func, &car_3));
+    auto4.start(callback(car_func, &car_4));
+    auto5.start(callback(car_func, &car_5));
+    auto6.start(callback(car_func, &car_6));
+    auto7.start(callback(car_func, &car_7));
+    
+    while(true);
+}
